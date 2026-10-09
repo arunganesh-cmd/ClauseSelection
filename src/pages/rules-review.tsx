@@ -12,6 +12,9 @@ import {
   RichTextDisplayField,
   TextItem,
   TagField,
+  DialogField,
+  CheckboxField,
+  ToggleField,
 } from '@pglevy/sailwind'
 import {
   LayoutGrid,
@@ -44,10 +47,13 @@ const statusTagColors: Record<RuleApprovalStatus, { background: string; text: st
   Pending: { background: '#DBEAFE', text: '#1E40AF' },
 }
 
+const exportFormats = ['Appian App Package (.zip)', 'JSON', 'CSV']
+
 export default function RulesReview() {
   const [, setLocation] = useLocation()
   const [rules, setRules] = useState<RuleApproval[]>([])
   const [loading, setLoading] = useState(true)
+  const [exportOpen, setExportOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
@@ -107,6 +113,16 @@ export default function RulesReview() {
                   />,
                 ]}
                 marginBelow="NONE"
+              />
+            </div>
+            <div className="shrink-0 pt-1">
+              <ButtonWidget
+                label="Export Package"
+                style="OUTLINE"
+                color="ACCENT"
+                icon="Package"
+                iconPosition="START"
+                onClick={() => setExportOpen(true)}
               />
             </div>
           </div>
@@ -286,6 +302,162 @@ export default function RulesReview() {
           </CardLayout>
         </div>
       </main>
+
+      {exportOpen && (
+        <ExportPackageDialog
+          rules={rules}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Export Package dialog                                                      */
+/* -------------------------------------------------------------------------- */
+
+const scopeChoices: RuleApprovalStatus[] = ['Accepted', 'Pending', 'Rejected']
+const environmentChoices = ['Development', 'Test', 'Production']
+
+function ExportPackageDialog({
+  rules,
+  onClose,
+}: {
+  rules: RuleApproval[]
+  onClose: () => void
+}) {
+  const today = new Date()
+  const defaultName = `clause-rules-${today.toISOString().slice(0, 10)}`
+
+  const [name, setName] = useState(defaultName)
+  const [format, setFormat] = useState<string | null>(exportFormats[0])
+  const [scope, setScope] = useState<RuleApprovalStatus[]>(['Accepted'])
+  const [includeClauseText, setIncludeClauseText] = useState(true)
+  const [includeHistory, setIncludeHistory] = useState(false)
+  const [sendToEnv, setSendToEnv] = useState(false)
+  const [targetEnv, setTargetEnv] = useState<string | null>('Development')
+  const [exporting, setExporting] = useState(false)
+
+  const selectedRules = rules.filter(r => scope.includes(r.status))
+  const clauseCount = selectedRules.reduce(
+    (sum, r) => sum + r.includedClauses + r.excludedClauses,
+    0,
+  )
+
+  const handleDownload = async () => {
+    setExporting(true)
+    // Prototype only: pretend to package and let the dialog close.
+    await new Promise(resolve => setTimeout(resolve, 600))
+    setExporting(false)
+    onClose()
+    alert(
+      `Package "${name}" prepared.\n\n${selectedRules.length} rules · ${clauseCount} clauses\nFormat: ${format}${
+        sendToEnv ? `\nSent to: ${targetEnv}` : ''
+      }`,
+    )
+  }
+
+  return (
+    <DialogField
+      open={true}
+      onOpenChange={open => {
+        if (!open) onClose()
+      }}
+      title="Export Rules Package"
+      description="Bundle rules and their clauses to share or deploy."
+      width="MEDIUM"
+      height="FIT"
+      closeOnOutsideClick={false}
+      marginBelow="NONE"
+    >
+      <div className="space-y-5">
+        <TextField
+          label="Package Name"
+          required={true}
+          value={name}
+          saveInto={setName}
+          marginBelow="NONE"
+        />
+
+        <DropdownField
+          label="Format"
+          required={true}
+          choiceLabels={exportFormats}
+          choiceValues={exportFormats}
+          value={format}
+          saveInto={setFormat}
+          marginBelow="NONE"
+        />
+
+        <div>
+          <CheckboxField
+            label="Include Rules With Status"
+            choiceLabels={scopeChoices}
+            choiceValues={scopeChoices}
+            value={scope}
+            saveInto={value => setScope((value as RuleApprovalStatus[]) ?? [])}
+            choiceLayout="COMPACT"
+            marginBelow="NONE"
+          />
+        </div>
+
+        <div className="space-y-3 rounded-md border border-gray-200 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+            What to include
+          </p>
+          <ToggleField
+            choiceLabel="Include full clause text"
+            value={includeClauseText}
+            saveInto={setIncludeClauseText}
+            marginBelow="NONE"
+          />
+          <ToggleField
+            choiceLabel="Include version history"
+            value={includeHistory}
+            saveInto={setIncludeHistory}
+            marginBelow="NONE"
+          />
+          <ToggleField
+            choiceLabel="Send to Appian environment after download"
+            value={sendToEnv}
+            saveInto={setSendToEnv}
+            marginBelow="NONE"
+          />
+          {sendToEnv && (
+            <div className="pt-2">
+              <DropdownField
+                label="Target Environment"
+                choiceLabels={environmentChoices}
+                choiceValues={environmentChoices}
+                value={targetEnv}
+                saveInto={setTargetEnv}
+                marginBelow="NONE"
+              />
+            </div>
+          )}
+        </div>
+
+        <hr className="border-gray-200" />
+        <div className="flex items-center justify-between">
+          <ButtonWidget
+            label="CANCEL"
+            style="LINK"
+            color="ACCENT"
+            disabled={exporting}
+            onClick={onClose}
+          />
+          <ButtonWidget
+            label={exporting ? 'PREPARING...' : 'DOWNLOAD PACKAGE'}
+            style="SOLID"
+            color="ACCENT"
+            icon="Download"
+            iconPosition="START"
+            disabled={exporting || selectedRules.length === 0 || !name.trim()}
+            onClick={handleDownload}
+          />
+        </div>
+      </div>
+    </DialogField>
   )
 }

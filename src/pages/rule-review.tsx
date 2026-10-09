@@ -135,23 +135,13 @@ function CollapsibleCard({
   )
 }
 
-/** A read-only row in the clause lists with a trailing "View" link. */
-function ClauseRow({ clause, onView }: { clause: ReviewClause; onView: () => void }) {
+/** A read-only bulleted entry in the included / excluded clause lists. */
+function ClauseRow({ clause }: { clause: ReviewClause }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 last:border-b-0">
-      <div className="min-w-0">
-        <span className="block text-sm font-semibold text-gray-900">{clause.number}</span>
-        <span className="mt-0.5 line-clamp-2 block text-sm text-gray-600">{clause.title}</span>
-      </div>
-      <button
-        type="button"
-        onClick={onView}
-        aria-label={`View ${clause.number}`}
-        className="shrink-0 text-sm font-medium text-blue-700 hover:underline focus:outline-none focus-visible:underline"
-      >
-        View
-      </button>
-    </div>
+    <li className="text-sm text-gray-800">
+      <span className="font-semibold text-gray-900">{clause.number}</span>
+      <span className="text-gray-600"> — {clause.title}</span>
+    </li>
   )
 }
 
@@ -534,19 +524,18 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
                   marginBelow="NONE"
                 />
               </div>
-              <div className="border-t border-gray-200">
-                {group.items.length === 0 && (
-                  <p className="px-5 py-4 text-sm text-gray-600">
+              <div className="border-t border-gray-200 px-5 py-4">
+                {group.items.length === 0 ? (
+                  <p className="text-sm text-gray-600">
                     No {group.label.toLowerCase()} in this rule.
                   </p>
+                ) : (
+                  <ul className="list-disc space-y-1.5 pl-5">
+                    {group.items.map(clause => (
+                      <ClauseRow key={clause.id} clause={clause} />
+                    ))}
+                  </ul>
                 )}
-                {group.items.map(clause => (
-                  <ClauseRow
-                    key={clause.id}
-                    clause={clause}
-                    onView={() => setViewingClauseId(clause.id)}
-                  />
-                ))}
               </div>
             </div>
           ))}
