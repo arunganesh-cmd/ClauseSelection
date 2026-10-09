@@ -175,6 +175,7 @@ export default function RulesReview() {
             </div>
 
             <ReadOnlyGrid
+              className="[&_tbody_td]:py-3"
               data={filteredRules}
               pageSize={10}
               pagingControls="ROW_COUNT"
@@ -256,6 +257,30 @@ export default function RulesReview() {
                     marginBelow="NONE"
                   />
                 )}
+              />
+              <GridColumn
+                label=""
+                width="MEDIUM"
+                align="START"
+                value={(row: RuleApproval) =>
+                  row.status === 'Pending' ? (
+                    <RichTextDisplayField
+                      value={[
+                        <TextItem
+                          key="start-review"
+                          text="Start Review"
+                          color="ACCENT"
+                          link={() => setLocation(`/rules-review/${row.id}`)}
+                          linkStyle="STANDALONE"
+                        />,
+                      ]}
+                      preventWrapping={true}
+                      marginBelow="NONE"
+                    />
+                  ) : (
+                    '-'
+                  )
+                }
               />
             </ReadOnlyGrid>
           </CardLayout>

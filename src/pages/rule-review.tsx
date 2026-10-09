@@ -17,8 +17,6 @@ import {
   Layers,
   CircleHelp,
   Shuffle,
-  Eye,
-  Pencil,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
@@ -52,13 +50,8 @@ const statusTagColors: Record<RuleApprovalStatus, { background: string; text: st
   Pending: { background: '#DBEAFE', text: '#1E40AF' },
 }
 
-const UNSAVED_CONFIRM = 'You have unsaved changes. Discard them and continue?'
-
 const pluralize = (count: number, singular: string) =>
   `${count} ${singular}${count === 1 ? '' : 's'}`
-
-const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
 
 /* -------------------------------------------------------------------------- */
 /* Read-only pieces                                                           */
@@ -174,22 +167,23 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
   const [queue, setQueue] = useState<RuleApproval[]>([])
   const [review, setReview] = useState<RuleReview | null>(null)
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'missing'>('loading')
-  const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
-  const [savedAt, setSavedAt] = useState<string | null>(null)
-  const [editingConditions, setEditingConditions] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  // Draft state used only while the Edit Rule dialog is open.
+  const [draftContent, setDraftContent] = useState<RuleReviewContent | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [editStep, setEditStep] = useState<0 | 1 | 2>(0)
   const [confirmingReject, setConfirmingReject] = useState(false)
   const [confirmingDecisionChange, setConfirmingDecisionChange] = useState(false)
   const [selectedClauseId, setSelectedClauseId] = useState<number | null>(null)
   const [viewingClauseId, setViewingClauseId] = useState<number | null>(null)
-  const [nameInput, setNameInput] = useState('')
 
   useEffect(() => {
     let cancelled = false
     setLoadState('loading')
     setDone(false)
-    setEditingConditions(false)
+    setEditDialogOpen(false)
     Promise.all([getReviewQueue(), getRuleReview(ruleId)]).then(([rules, stored]) => {
       if (cancelled) return
       setQueue(rules)
@@ -201,10 +195,6 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
       // Work on a copy so unsaved edits never leak into the data layer.
       const copy = structuredClone(stored)
       setReview(copy)
-      setDirty(false)
-      setSavedAt(stored.draftSavedAt)
-      const foundRule = rules.find(r => r.id === ruleId)
-      if (foundRule) setNameInput(foundRule.name)
       const included = copy.clauses.filter(c => c.outcome === 'Included')
       const excluded = copy.clauses.filter(c => c.outcome === 'Excluded')
       setSelectedClauseId([...included, ...excluded][0]?.id ?? null)
@@ -229,52 +219,42 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
     groups: r.groups,
   })
 
-  /* -------------------------------- navigation ------------------------------- */
-
-  const confirmLeave = () => !dirty || window.confirm(UNSAVED_CONFIRM)
-
-  const goToList = () => {
-    if (!confirmLeave()) return
-    setLocation('/rules-review')
-  }
-
   /* --------------------------------- actions --------------------------------- */
 
-  const handleContentChange = (content: RuleReviewContent) => {
-    setReview(prev => (prev ? { ...prev, ...content } : prev))
-    setDirty(true)
+  /** Open the Edit Rule wizard with a fresh draft seeded from the current review. */
+  const openEditDialog = () => {
+    if (!review || !rule) return
+    setDraftContent(toContent(review))
+    setDraftName(rule.name)
+    setEditStep(0)
+    setEditDialogOpen(true)
   }
 
-  const handleNameChange = (next: string) => {
-    setNameInput(next)
-    setDirty(true)
+  const closeEditDialog = () => {
+    setEditDialogOpen(false)
+    setDraftContent(null)
+    setEditStep(0)
   }
 
-  /** Persist a name change, if any, so the Rules list and header stay in sync. */
-  const persistNameIfChanged = async () => {
-    if (!rule || nameInput === rule.name) return
-    await updateRuleApproval(ruleId, { name: nameInput })
-    setQueue(await getReviewQueue())
-  }
-
-  const handleSaveDraft = async () => {
-    if (!review) return
+  /** Save the dialog draft to the data layer and return to the Rules list. */
+  const handleSaveEdit = async () => {
+    if (!review || !rule || !draftContent) return
     setBusy(true)
-    await persistNameIfChanged()
-    const saved = await saveRuleReviewDraft(ruleId, toContent(review))
-    setSavedAt(saved?.draftSavedAt ?? null)
-    setDirty(false)
+    if (draftName !== rule.name) {
+      await updateRuleApproval(ruleId, { name: draftName })
+    }
+    await saveRuleReviewDraft(ruleId, draftContent)
     setBusy(false)
+    closeEditDialog()
+    setLocation('/rules-review')
   }
 
   const handleDecision = async (decision: 'accept' | 'reject') => {
     if (!review) return
     setBusy(true)
-    await persistNameIfChanged()
     const content = toContent(review)
     if (decision === 'accept') await acceptRuleReview(ruleId, content)
     else await rejectRuleReview(ruleId, content)
-    setDirty(false)
     setBusy(false)
     // Return to the Rules list; the reviewer picks the next rule to open.
     setLocation('/rules-review')
@@ -287,7 +267,6 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
   const handleChangeDecision = async () => {
     if (!review || !rule || rule.status === 'Pending') return
     setBusy(true)
-    await persistNameIfChanged()
     const content = toContent(review)
     if (rule.status === 'Accepted') {
       await rejectRuleReview(ruleId, content)
@@ -296,19 +275,11 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
     }
     // Refresh queue so the status tag reflects the new decision.
     setQueue(await getReviewQueue())
-    setDirty(false)
-    setSavedAt(null)
     setBusy(false)
     setConfirmingDecisionChange(false)
   }
 
   /* ---------------------------------- render --------------------------------- */
-
-  const statusMessage = dirty
-    ? 'Unsaved changes'
-    : savedAt
-      ? `Draft saved at ${formatTime(savedAt)}`
-      : ''
 
   const renderShell = (content: ReactNode) => (
     <div className="flex h-screen bg-white">
@@ -403,54 +374,49 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
       {/* Page header */}
       <div className="shrink-0 border-b border-gray-200 bg-white px-8 py-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="-ml-2 mt-0.5">
-              <ButtonWidget
-                style="GHOST"
-                color="SECONDARY"
-                size="SMALL"
-                icon="ChevronLeft"
-                tooltip="Back to Rules"
-                accessibilityText="Back to Rules"
-                onClick={goToList}
+          <div>
+            <div className="flex items-center gap-3">
+              <HeadingField
+                text="Review Rule"
+                size="LARGE"
+                headingTag="H1"
+                fontWeight="REGULAR"
+                marginBelow="NONE"
               />
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <HeadingField
-                  text="Review Rule"
-                  size="LARGE"
-                  headingTag="H1"
-                  fontWeight="REGULAR"
-                  marginBelow="NONE"
-                />
-                <TagField
-                  size="SMALL"
-                  tags={[
-                    {
-                      text: rule.status,
-                      backgroundColor: statusTagColors[rule.status].background,
-                      textColor: statusTagColors[rule.status].text,
-                    },
-                  ]}
-                  marginBelow="NONE"
-                />
-              </div>
-              <RichTextDisplayField
-                value={[
-                  <TextItem
-                    key="subtitle"
-                    text="Review the rule and accept it to add to the library"
-                    color="SECONDARY"
-                    size="STANDARD"
-                  />,
+              <TagField
+                size="SMALL"
+                tags={[
+                  {
+                    text: rule.status,
+                    backgroundColor: statusTagColors[rule.status].background,
+                    textColor: statusTagColors[rule.status].text,
+                  },
                 ]}
                 marginBelow="NONE"
               />
             </div>
+            <RichTextDisplayField
+              value={[
+                <TextItem
+                  key="subtitle"
+                  text="Review the rule and accept it to add to the library"
+                  color="SECONDARY"
+                  size="STANDARD"
+                />,
+              ]}
+              marginBelow="NONE"
+            />
           </div>
           {rule.status !== 'Pending' && (
-            <div className="shrink-0 pt-1">
+            <div className="shrink-0 flex items-center gap-2 pt-1">
+              <ButtonWidget
+                label="Edit Rule"
+                style="OUTLINE"
+                color="ACCENT"
+                icon="Pencil"
+                iconPosition="START"
+                onClick={openEditDialog}
+              />
               <ButtonWidget
                 label="Change Decision"
                 style="OUTLINE"
@@ -464,15 +430,28 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
         </div>
       </div>
 
+      {/* Back link spans the full width above both panes */}
+      <div className="shrink-0 border-b border-gray-200 bg-gray-50 px-6 py-2">
+        <ButtonWidget
+          label="Back to Rules"
+          style="LINK"
+          color="ACCENT"
+          size="SMALL"
+          icon="ChevronLeft"
+          iconPosition="START"
+          onClick={() => setLocation('/rules-review')}
+        />
+      </div>
+
       {/* Two panes, each scrolling on its own */}
       <div className="flex min-h-0 flex-1">
         {/* Left pane: rule, conditions, included and excluded clauses */}
-        <section aria-label="Rule" className="min-w-0 flex-[3] overflow-y-auto px-8 py-6">
+        <section aria-label="Rule" className="min-w-0 flex-[3] overflow-y-auto px-8 py-4">
           <div className="rounded-md border border-gray-200 bg-white">
             <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4">
               <div className="min-w-0">
                 <HeadingField
-                  text={nameInput || rule.name}
+                  text={rule.name}
                   size="MEDIUM_PLUS"
                   headingTag="H2"
                   fontWeight="SEMI_BOLD"
@@ -483,87 +462,61 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
                   {pluralize(review.groups.length, 'group')}
                 </p>
               </div>
-              <div
-                role="group"
-                aria-label="Rule view"
-                className="inline-flex shrink-0 overflow-hidden rounded border border-gray-300 text-xs font-semibold uppercase"
-              >
-                <button
-                  type="button"
-                  aria-current={!editingConditions ? 'true' : undefined}
-                  onClick={() => setEditingConditions(false)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 ${
-                    !editingConditions
-                      ? 'bg-blue-50 text-blue-800'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <Eye size={14} aria-hidden="true" /> Preview
-                </button>
-                <button
-                  type="button"
-                  aria-current={editingConditions ? 'true' : undefined}
-                  onClick={() => setEditingConditions(true)}
-                  className={`inline-flex items-center gap-1.5 border-l border-gray-300 px-3 py-1.5 ${
-                    editingConditions
-                      ? 'bg-blue-50 text-blue-800'
-                      : 'bg-white text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  <Pencil size={14} aria-hidden="true" /> Edit
-                </button>
-              </div>
+              {rule.status === 'Pending' && (
+                <div className="shrink-0">
+                  <ButtonWidget
+                    label="Edit Rule"
+                    style="OUTLINE"
+                    color="ACCENT"
+                    icon="Pencil"
+                    iconPosition="START"
+                    size="SMALL"
+                    onClick={openEditDialog}
+                  />
+                </div>
+              )}
             </div>
 
-            {editingConditions ? (
-              <EditConditionsForm
-                name={nameInput}
-                onNameChange={handleNameChange}
-                content={toContent(review)}
-                onChange={handleContentChange}
+            <div className="px-5 py-4">
+              <HeadingField
+                text="Conditions"
+                size="MEDIUM_PLUS"
+                headingTag="H3"
+                fontWeight="SEMI_BOLD"
+                marginBelow="EVEN_LESS"
               />
-            ) : (
-              <div className="px-5 py-4">
-                <HeadingField
-                  text="Conditions"
-                  size="MEDIUM_PLUS"
-                  headingTag="H3"
-                  fontWeight="SEMI_BOLD"
-                  marginBelow="EVEN_LESS"
-                />
-                <p className="mb-4 text-xs text-gray-600">
-                  Clause set data that triggers this rule
-                </p>
+              <p className="mb-4 text-xs text-gray-600">
+                Clause set data that triggers this rule
+              </p>
 
-                {conditionTotal === 0 && (
-                  <p className="text-sm text-gray-700">
-                    This rule has no conditions, so it applies to every clause set.
-                  </p>
+              {conditionTotal === 0 && (
+                <p className="text-sm text-gray-700">
+                  This rule has no conditions, so it applies to every clause set.
+                </p>
+              )}
+
+              <div className="space-y-4">
+                {review.conditions.length > 0 && (
+                  <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
+                    <ConditionStack conditions={review.conditions} join={review.join} />
+                  </div>
                 )}
 
-                <div className="space-y-4">
-                  {review.conditions.length > 0 && (
+                {review.groups.map((group, groupIndex) => (
+                  <div key={group.id}>
+                    {(review.conditions.length > 0 || groupIndex > 0) && (
+                      <p className="pb-2 text-xs font-semibold text-gray-600">{review.join}</p>
+                    )}
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
-                      <ConditionStack conditions={review.conditions} join={review.join} />
+                      <p className="mb-3 text-xs text-gray-700">
+                        Condition Group {groupIndex + 1}
+                      </p>
+                      <ConditionStack conditions={group.conditions} join={group.join} />
                     </div>
-                  )}
-
-                  {review.groups.map((group, groupIndex) => (
-                    <div key={group.id}>
-                      {(review.conditions.length > 0 || groupIndex > 0) && (
-                        <p className="pb-2 text-xs font-semibold text-gray-600">{review.join}</p>
-                      )}
-                      <div className="rounded-md border border-gray-200 bg-gray-50 p-4">
-                        <p className="mb-3 text-xs text-gray-700">
-                          Condition Group {groupIndex + 1}
-                        </p>
-                        <ConditionStack conditions={group.conditions} join={group.join} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
           </div>
 
           {/* Included and excluded clauses, one row each */}
@@ -662,25 +615,16 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
         </section>
       </div>
 
-      {/* Footer actions — always visible so every rule can be edited and saved. */}
-      <div className="flex shrink-0 items-center justify-between gap-4 border-t border-gray-200 bg-white px-8 py-3">
-        <div className="flex items-center gap-4">
+      {/* Footer actions — Pending rules get Cancel / Reject / Accept. */}
+      {rule.status === 'Pending' && (
+        <div className="flex shrink-0 items-center justify-between gap-4 border-t border-gray-200 bg-white px-8 py-3">
           <ButtonWidget
-            label="Save Draft"
+            label="Cancel"
             style="OUTLINE"
-            color="ACCENT"
-            disabled={busy || !dirty}
-            onClick={handleSaveDraft}
+            color="SECONDARY"
+            disabled={busy}
+            onClick={() => setLocation('/rules-review')}
           />
-          <span
-            className={`text-sm ${dirty ? 'text-amber-700' : 'text-gray-600'}`}
-            role="status"
-            aria-live="polite"
-          >
-            {statusMessage}
-          </span>
-        </div>
-        {rule.status === 'Pending' && (
           <div className="flex items-center gap-3">
             <ButtonWidget
               label="Reject"
@@ -697,8 +641,8 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
               onClick={() => handleDecision('accept')}
             />
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {confirmingReject && (
         <DialogField
@@ -802,7 +746,216 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
             </DialogField>
           )
         })()}
+
+      {editDialogOpen && draftContent && (
+        <EditRuleDialog
+          step={editStep}
+          onStepChange={setEditStep}
+          name={draftName}
+          onNameChange={setDraftName}
+          content={draftContent}
+          onContentChange={setDraftContent}
+          clauses={review.clauses}
+          busy={busy}
+          onCancel={closeEditDialog}
+          onSave={handleSaveEdit}
+        />
+      )}
     </>,
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+/* Edit Rule wizard dialog                                                    */
+/* -------------------------------------------------------------------------- */
+
+const editSteps = ['Create Rule', 'Include Clauses', 'Exclude Clauses'] as const
+
+interface EditRuleDialogProps {
+  step: 0 | 1 | 2
+  onStepChange: (step: 0 | 1 | 2) => void
+  name: string
+  onNameChange: (name: string) => void
+  content: RuleReviewContent
+  onContentChange: (content: RuleReviewContent) => void
+  clauses: ReviewClause[]
+  busy: boolean
+  onCancel: () => void
+  onSave: () => void
+}
+
+function EditRuleDialog({
+  step,
+  onStepChange,
+  name,
+  onNameChange,
+  content,
+  onContentChange,
+  clauses,
+  busy,
+  onCancel,
+  onSave,
+}: EditRuleDialogProps) {
+  const included = clauses.filter(c => c.outcome === 'Included')
+  const excluded = clauses.filter(c => c.outcome === 'Excluded')
+
+  const next = () => {
+    if (step < 2) onStepChange((step + 1) as 0 | 1 | 2)
+    else onSave()
+  }
+  const back = () => {
+    if (step > 0) onStepChange((step - 1) as 0 | 1 | 2)
+  }
+
+  return (
+    <DialogField
+      open={true}
+      onOpenChange={open => {
+        if (!open) onCancel()
+      }}
+      title="Edit Rule"
+      description="Required fields are marked with an asterisk (*)"
+      width="FIT"
+      height="EXTRA_TALL"
+      closeOnOutsideClick={false}
+      marginBelow="NONE"
+    >
+      <div
+        className="flex w-full flex-col"
+        style={{ height: 'calc(85vh - 7rem)' }}
+      >
+        {/* Stepper */}
+        <div className="shrink-0 pb-6">
+          <ol className="relative flex items-center justify-between">
+            <div className="absolute left-0 right-0 top-3 h-0.5 bg-gray-200" aria-hidden="true" />
+            {editSteps.map((label, idx) => {
+              const active = idx === step
+              const complete = idx < step
+              return (
+                <li key={label} className="relative z-10 flex flex-col items-center">
+                  <span
+                    className={`flex h-6 w-6 items-center justify-center rounded-full border-2 text-xs font-semibold ${
+                      active
+                        ? 'border-blue-700 bg-white text-blue-700'
+                        : complete
+                          ? 'border-blue-700 bg-blue-700 text-white'
+                          : 'border-gray-300 bg-white text-gray-500'
+                    }`}
+                  >
+                    {idx + 1}
+                  </span>
+                  <span
+                    className={`mt-2 text-xs ${
+                      active ? 'font-semibold text-gray-900' : 'text-gray-600'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+        </div>
+
+        {/* Step body */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {step === 0 && (
+            <EditConditionsForm
+              name={name}
+              onNameChange={onNameChange}
+              content={content}
+              onChange={onContentChange}
+            />
+          )}
+          {step === 1 && (
+            <ClauseListStep
+              title="Included Clauses"
+              description="These clauses are added when the rule conditions are met."
+              clauses={included}
+            />
+          )}
+          {step === 2 && (
+            <ClauseListStep
+              title="Excluded Clauses"
+              description="These clauses are removed when the rule conditions are met."
+              clauses={excluded}
+            />
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-4 flex shrink-0 items-center justify-between border-t border-gray-200 pt-4">
+          <ButtonWidget
+            label="CANCEL"
+            style="LINK"
+            color="ACCENT"
+            disabled={busy}
+            onClick={onCancel}
+          />
+          <div className="flex items-center gap-3">
+            {step > 0 && (
+              <ButtonWidget
+                label="BACK"
+                style="OUTLINE"
+                color="ACCENT"
+                disabled={busy}
+                onClick={back}
+              />
+            )}
+            <ButtonWidget
+              label={step === 2 ? 'SAVE' : 'NEXT'}
+              style="SOLID"
+              color="ACCENT"
+              disabled={busy}
+              onClick={next}
+            />
+          </div>
+        </div>
+      </div>
+    </DialogField>
+  )
+}
+
+/** Read-only clause list used for the Include / Exclude Clauses steps. */
+function ClauseListStep({
+  title,
+  description,
+  clauses,
+}: {
+  title: string
+  description: string
+  clauses: ReviewClause[]
+}) {
+  return (
+    <div className="px-5 py-2">
+      <HeadingField
+        text={`${title} (${clauses.length})`}
+        size="MEDIUM_PLUS"
+        headingTag="H3"
+        fontWeight="SEMI_BOLD"
+        marginBelow="EVEN_LESS"
+      />
+      <p className="mb-4 text-xs text-gray-600">{description}</p>
+      {clauses.length === 0 ? (
+        <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-600">
+          No clauses in this list.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-gray-200">
+          {clauses.map((clause, idx) => (
+            <div
+              key={clause.id}
+              className={`flex items-start gap-3 px-4 py-3 ${
+                idx > 0 ? 'border-t border-gray-100' : ''
+              }`}
+            >
+              <span className="shrink-0 text-sm font-semibold text-gray-900">{clause.number}</span>
+              <span className="text-sm text-gray-700">{clause.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
