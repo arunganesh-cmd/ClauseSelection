@@ -231,14 +231,14 @@ export default function RulesReview() {
               <GridColumn
                 label="Included Clauses"
                 sortField="includedClauses"
-                width="NARROW"
+                width="MEDIUM"
                 align="START"
                 value="includedClauses"
               />
               <GridColumn
                 label="Excluded Clauses"
                 sortField="excludedClauses"
-                width="NARROW"
+                width="MEDIUM"
                 align="START"
                 value="excludedClauses"
               />
