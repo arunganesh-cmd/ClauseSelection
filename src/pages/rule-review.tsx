@@ -280,7 +280,7 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
         appianLogoSrc="/images/icon-appian-header.png"
         highlightColor="#C7C4F4"
       />
-      <main className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden border-l border-gray-200 bg-gray-50">
+      <main className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden border-l border-gray-200 bg-white">
         {content}
       </main>
     </div>
@@ -418,19 +418,6 @@ function RuleReviewScreen({ pendingOnly }: { pendingOnly: boolean }) {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Back link spans the full width above both panes */}
-      <div className="shrink-0 border-b border-gray-200 bg-gray-50 px-6 py-2">
-        <ButtonWidget
-          label="Back to Rules"
-          style="LINK"
-          color="ACCENT"
-          size="SMALL"
-          icon="ChevronLeft"
-          iconPosition="START"
-          onClick={() => setLocation('/rules-review')}
-        />
       </div>
 
       {/* Two panes, each scrolling on its own */}
