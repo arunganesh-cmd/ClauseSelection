@@ -31,7 +31,7 @@ export interface Question {
 }
 
 const questions: Question[] = [
-  { id: 1, question: 'QE20260908 - Does this acquisition require compliance banner verification?', responseType: 'Radio Button', source: 'Standard', responseOptions: ['Yes - Banner Required', 'No - Banner Not Required'], lastModified: '2026-09-08T07:21:00', modifiedBy: 'john.smith', status: 'Pending' },
+  { id: 1, question: 'Does this acquisition require compliance banner verification?', responseType: 'Radio Button', source: 'Standard', responseOptions: ['Yes - Banner Required', 'No - Banner Not Required'], lastModified: '2026-09-08T07:21:00', modifiedBy: 'john.smith', status: 'Pending' },
   { id: 2, question: 'Identify the named Contracting Officer (CO) for this requirement.', responseType: 'Dropdown', source: 'Standard', responseOptions: ['Contracting Officer A', 'Contracting Officer B', 'Not specified'], lastModified: '2026-03-27T06:45:00', modifiedBy: 'alice.chen', status: 'Pending' },
   { id: 3, question: 'What is the primary Solicitation or Order Number associated with this document?', responseType: 'Dropdown', source: 'Standard', responseOptions: ['Solicitation number', 'Order number', 'Not specified'], lastModified: '2026-03-27T06:25:00', modifiedBy: 'john.smith', status: 'Pending' },
   { id: 4, question: 'Identify the primary Government Agency issuing this requirement.', responseType: 'Dropdown', source: 'Standard', responseOptions: ['Department of Defense', 'General Services Administration', 'Department of Homeland Security', 'Other'], lastModified: '2026-03-27T06:25:00', modifiedBy: 'john.smith', status: 'Pending' },
@@ -51,10 +51,15 @@ const questions: Question[] = [
   { id: 18, question: 'Does the requirement include a Government Furnished Property (GFP) clause?', responseType: 'Radio Button', source: 'Standard', responseOptions: ['Yes', 'No'], lastModified: '2026-03-27T06:24:00', modifiedBy: 'john.smith', status: 'Pending' },
   { id: 19, question: 'Identify the applicable Payment Terms for this requirement.', responseType: 'Dropdown', source: 'Standard', responseOptions: ['Net 30', 'Net 45', 'Net 60', 'Progress payments'], lastModified: '2026-03-27T06:24:00', modifiedBy: 'alice.chen', status: 'Pending' },
   { id: 20, question: 'Is the acquisition subject to the Trade Agreements Act?', responseType: 'Radio Button', source: 'Standard', responseOptions: ['Yes', 'No'], lastModified: '2026-03-27T06:24:00', modifiedBy: 'john.smith', status: 'Pending' },
+  { id: 21, question: 'Does the solicitation request technical proposals under two-step sealed bidding procedures?', responseType: 'Radio Button', source: 'Standard', responseOptions: ['Yes', 'No'], lastModified: '2026-06-17T17:07:00', modifiedBy: 'raajiv.madivanane', status: 'Pending' },
 ]
 
-/** System (Standard) questions stay hidden until the customer imports them. */
-let systemQuestionsImported = false
+/**
+ * System (Standard) questions stay hidden until the customer imports them.
+ * Seeded as imported in this prototype so the Review Questions screen is
+ * usable immediately without having to click "Import Questions" first.
+ */
+let systemQuestionsImported = true
 
 const visibleQuestions = () =>
   questions.filter(q => q.source === 'Custom' || systemQuestionsImported)
