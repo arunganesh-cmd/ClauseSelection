@@ -19,6 +19,8 @@ import QuestionsLanding from './pages/questions-landing'
 import Questions from './pages/questions'
 import QuestionsReview from './pages/questions-review'
 import ClauseHistory from './pages/clause-history'
+import Library from './pages/library'
+import LibraryImport from './pages/library-import'
 
 const pages = [
   { path: '/', title: 'Kanban Board', component: KanbanBoard },
@@ -39,6 +41,8 @@ const pages = [
   { path: '/questions', title: 'Questions', component: Questions },
   { path: '/questions-review', title: 'Review System Questions', component: QuestionsReview },
   { path: '/clause-history', title: 'Clause History', component: ClauseHistory },
+  { path: '/library', title: 'Library', component: Library },
+  { path: '/library/import', title: 'Import Library', component: LibraryImport },
 ]
 
 function App() {
