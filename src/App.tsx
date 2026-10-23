@@ -21,6 +21,7 @@ import QuestionsReview from './pages/questions-review'
 import ClauseHistory from './pages/clause-history'
 import Library from './pages/library'
 import LibraryImport from './pages/library-import'
+import LibrarySummary from './pages/library-summary'
 
 const pages = [
   { path: '/', title: 'Kanban Board', component: KanbanBoard },
@@ -43,6 +44,7 @@ const pages = [
   { path: '/clause-history', title: 'Clause History', component: ClauseHistory },
   { path: '/library', title: 'Library', component: Library },
   { path: '/library/import', title: 'Import Library', component: LibraryImport },
+  { path: '/library/import/summary', title: 'Library Import Summary', component: LibrarySummary },
 ]
 
 function App() {

@@ -19,6 +19,8 @@ import {
   UploadCloud,
   RefreshCw,
   Info,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 
 /**
@@ -43,19 +45,41 @@ const navPages = [
   { label: 'Library', icon: BookOpen, isSelected: true },
 ]
 
-const steps = ['Upload package', 'Confirm'] as const
 type Step = 0 | 1
+
+/** Outcome state after the user clicks "Import". */
+type ImportStatus = 'idle' | 'importing' | 'success' | 'failed'
 
 export default function LibraryImport() {
   const [, setLocation] = useLocation()
   const [step, setStep] = useState<Step>(0)
-  const [importing, setImporting] = useState(false)
+  const [status, setStatus] = useState<ImportStatus>('idle')
+  const [refreshCount, setRefreshCount] = useState(0)
   const [fileName, setFileName] = useState<string | null>(null)
 
   const next = () => setStep(prev => Math.min(1, (prev + 1) as Step) as Step)
   const back = () => setStep(prev => Math.max(0, (prev - 1) as Step) as Step)
   const cancel = () => setLocation('/library')
-  const startImport = () => setImporting(true)
+  const startImport = () => {
+    setStatus('importing')
+    setRefreshCount(0)
+  }
+  /**
+   * Simulate polling the import status. Each click of Refresh flips between
+   * success and failed so both outcomes can be demoed from the same screen.
+   */
+  const handleRefresh = () => {
+    const nextCount = refreshCount + 1
+    setRefreshCount(nextCount)
+    setStatus(nextCount % 2 === 1 ? 'failed' : 'success')
+  }
+  const retryImport = () => {
+    setStatus('idle')
+    setStep(0)
+    setFileName(null)
+    setRefreshCount(0)
+  }
+  const importing = status !== 'idle'
 
   const canContinue = step === 0 ? fileName !== null : true
 
@@ -88,36 +112,34 @@ export default function LibraryImport() {
                   size="LARGE"
                   headingTag="H1"
                   fontWeight="SEMI_BOLD"
-                  marginBelow="EVEN_LESS"
+                  marginBelow="NONE"
                 />
-                {!importing && (
-                  <RichTextDisplayField
-                    value={[
-                      <TextItem
-                        key="s"
-                        text={`Step ${step + 1} of ${steps.length}: ${steps[step]}. Required fields are marked with an asterisk (*)`}
-                        color="SECONDARY"
-                        size="STANDARD"
-                      />,
-                    ]}
-                    marginBelow="NONE"
-                  />
-                )}
               </div>
 
               {/* Body */}
               <div className="min-h-[22rem] px-8 py-8">
-                {importing ? (
-                  <ImportingPanel onViewSummary={() => setLocation('/library')} />
-                ) : step === 0 ? (
-                  <UploadStep
-                    fileName={fileName}
-                    onFileChosen={setFileName}
-                    onFileCleared={() => setFileName(null)}
+                {status === 'importing' && (
+                  <ImportingPanel
+                    onRefresh={handleRefresh}
+                    onViewSummary={() => setLocation('/library/import/summary')}
                   />
-                ) : (
-                  <ConfirmStep />
                 )}
+                {status === 'success' && (
+                  <SuccessPanel
+                    onViewSummary={() => setLocation('/library/import/summary')}
+                  />
+                )}
+                {status === 'failed' && <FailedPanel onRetry={retryImport} />}
+                {status === 'idle' &&
+                  (step === 0 ? (
+                    <UploadStep
+                      fileName={fileName}
+                      onFileChosen={setFileName}
+                      onFileCleared={() => setFileName(null)}
+                    />
+                  ) : (
+                    <ConfirmStep />
+                  ))}
               </div>
 
               {/* Footer */}
@@ -328,7 +350,7 @@ function ConfirmStep() {
         </p>
       </div>
       <HeadingField
-        text="Confirm the import"
+        text="Import summary"
         size="MEDIUM"
         headingTag="H2"
         fontWeight="SEMI_BOLD"
@@ -393,7 +415,13 @@ function ConfirmStep() {
 
 /* ----------------------------- In-progress panel --------------------------- */
 
-function ImportingPanel({ onViewSummary }: { onViewSummary: () => void }) {
+function ImportingPanel({
+  onRefresh,
+  onViewSummary,
+}: {
+  onRefresh: () => void
+  onViewSummary: () => void
+}) {
   return (
     <div className="mx-auto max-w-2xl py-6 text-center">
       <div
@@ -435,12 +463,98 @@ function ImportingPanel({ onViewSummary }: { onViewSummary: () => void }) {
           iconPosition="START"
           style="OUTLINE"
           color="ACCENT"
+          onClick={onRefresh}
         />
         <ButtonWidget
           label="View summary"
           style="SOLID"
           color="ACCENT"
           onClick={onViewSummary}
+        />
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------------- Success panel ------------------------------ */
+
+function SuccessPanel({ onViewSummary }: { onViewSummary: () => void }) {
+  return (
+    <div className="mx-auto max-w-2xl py-6 text-center">
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
+        <CheckCircle2
+          size={32}
+          strokeWidth={2}
+          className="text-green-600"
+          aria-hidden="true"
+        />
+      </div>
+      <HeadingField
+        text="Import complete"
+        size="MEDIUM"
+        headingTag="H2"
+        fontWeight="SEMI_BOLD"
+        align="CENTER"
+        marginBelow="LESS"
+      />
+      <RichTextDisplayField
+        value={[
+          <TextItem
+            key="s"
+            text="Version 4.1.2 is installed. Review the changes on the summary page."
+            color="SECONDARY"
+            size="STANDARD"
+          />,
+        ]}
+        align="CENTER"
+        marginBelow="STANDARD"
+      />
+      <div className="flex items-center justify-center">
+        <ButtonWidget
+          label="View summary"
+          style="SOLID"
+          color="ACCENT"
+          onClick={onViewSummary}
+        />
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------ Failed panel ------------------------------ */
+
+function FailedPanel({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="mx-auto max-w-2xl py-6 text-center">
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-50">
+        <XCircle size={32} strokeWidth={2} className="text-red-600" aria-hidden="true" />
+      </div>
+      <HeadingField
+        text="Import failed"
+        size="MEDIUM"
+        headingTag="H2"
+        fontWeight="SEMI_BOLD"
+        align="CENTER"
+        marginBelow="LESS"
+      />
+      <RichTextDisplayField
+        value={[
+          <TextItem
+            key="s"
+            text="Something went wrong while importing the package. The installed version remains unchanged, and no changes have been partially applied."
+            color="SECONDARY"
+            size="STANDARD"
+          />,
+        ]}
+        align="CENTER"
+        marginBelow="STANDARD"
+      />
+      <div className="flex items-center justify-center">
+        <ButtonWidget
+          label="Retry import"
+          style="SOLID"
+          color="ACCENT"
+          onClick={onRetry}
         />
       </div>
     </div>
