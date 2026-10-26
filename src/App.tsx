@@ -22,6 +22,7 @@ import ClauseHistory from './pages/clause-history'
 import Library from './pages/library'
 import LibraryImport from './pages/library-import'
 import LibrarySummary from './pages/library-summary'
+import LibraryRule from './pages/library-rule'
 
 const pages = [
   { path: '/', title: 'Kanban Board', component: KanbanBoard },
@@ -45,6 +46,7 @@ const pages = [
   { path: '/library', title: 'Library', component: Library },
   { path: '/library/import', title: 'Import Library', component: LibraryImport },
   { path: '/library/import/summary', title: 'Library Import Summary', component: LibrarySummary },
+  { path: '/library-rule/:id', title: 'Library Rule', component: LibraryRule },
 ]
 
 function App() {

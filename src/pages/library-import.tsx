@@ -331,13 +331,16 @@ function UploadStep({
             label: 'Option 2',
             content: (
               <div className="pt-6">
-                <HeadingField
-                  text="Upload package"
-                  size="MEDIUM"
-                  headingTag="H2"
-                  fontWeight="SEMI_BOLD"
-                  marginBelow="LESS"
-                />
+                <div className="text-center">
+                  <HeadingField
+                    text="Upload package"
+                    size="MEDIUM"
+                    headingTag="H2"
+                    fontWeight="SEMI_BOLD"
+                    align="CENTER"
+                    marginBelow="LESS"
+                  />
+                </div>
                 {/* Show the download helper only until a package is chosen. */}
                 {!fileName && stepsCard}
                 {dropZone}
@@ -812,7 +815,7 @@ function SuccessPanel({ onViewSummary }: { onViewSummary: () => void }) {
         value={[
           <TextItem
             key="s"
-            text="Version 4.1.2 is installed. Review the changes on the summary page."
+            text="Version 4.1.2 is installed. The summary page will show you what changed."
             color="SECONDARY"
             size="STANDARD"
           />,
