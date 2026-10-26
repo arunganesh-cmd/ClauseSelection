@@ -106,21 +106,14 @@ export default function Library() {
                 align="CENTER"
                 marginBelow="STANDARD"
               />
-              <div className="flex items-center gap-3">
+              <div className="flex items-center">
                 <ButtonWidget
                   label="Import library"
                   icon="Upload"
                   iconPosition="START"
-                  style="OUTLINE"
-                  color="ACCENT"
-                  onClick={goToImport}
-                />
-                <ButtonWidget
-                  label="Forum download page"
-                  icon="ExternalLink"
-                  iconPosition="END"
                   style="SOLID"
                   color="ACCENT"
+                  onClick={goToImport}
                 />
               </div>
             </div>
