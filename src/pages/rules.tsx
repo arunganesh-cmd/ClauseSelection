@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useLocation } from 'wouter'
 import {
   SiteNav,
-  TabsField,
   HeadingField,
   CardLayout,
   ReadOnlyGrid,
@@ -36,20 +36,89 @@ const navPages = [
   { label: 'Rules', icon: Shuffle, isSelected: true },
 ]
 
-const statusChoices = ['Active', 'Draft']
+const statusChoices = ['Active', 'Inactive']
 
-const statusTagColors: Record<Rule['status'], { background: string; text: string }> = {
+type DisplayStatus = 'Active' | 'Inactive'
+
+const statusTagColors: Record<DisplayStatus, { background: string; text: string }> = {
   Active: { background: '#D7F3E0', text: '#166534' },
-  Draft: { background: '#DEDAFB', text: '#3730A3' },
+  Inactive: { background: '#FDE2E2', text: '#991B1B' },
+}
+
+/** The data layer uses "Draft" for not-yet-active rules; display as "Inactive". */
+const displayStatus = (status: Rule['status']): DisplayStatus =>
+  status === 'Active' ? 'Active' : 'Inactive'
+
+/** Display Source: data layer "Standard" → "System". */
+const displaySource = (source: Rule['source']): string =>
+  source === 'Standard' ? 'System' : 'Custom'
+
+/**
+ * Pulls a FAR/DFARS clause number off the start of a rule name. Rules without
+ * a leading clause reference return an empty string so the Clause column
+ * stays blank for them.
+ */
+const CLAUSE_RE = /^(FAR|DFARS)\s+[\d.\-A-Za-z]+(?:\s+Alt\s+[IVX]+)?/i
+function splitRuleName(name: string): { clause: string; title: string } {
+  const match = name.match(CLAUSE_RE)
+  if (!match) return { clause: '', title: name }
+  return { clause: match[0], title: name.slice(match[0].length).trim() }
+}
+
+/**
+ * A row displayed in the grid. If a rule has both included and excluded
+ * clauses, it becomes two rows: one for the included side, one for the
+ * excluded side.
+ */
+interface RuleRow {
+  key: string
+  rule: Rule
+  side: 'Included' | 'Excluded' | null
+  includedClauses: number
+  excludedClauses: number
+}
+
+/** Explode rules into one row per clause side when a rule has both. */
+function expandRows(rules: Rule[]): RuleRow[] {
+  const rows: RuleRow[] = []
+  for (const rule of rules) {
+    const hasInc = rule.includedClauses > 0
+    const hasExc = rule.excludedClauses > 0
+    if (hasInc && hasExc) {
+      rows.push({
+        key: `${rule.id}-inc`,
+        rule,
+        side: 'Included',
+        includedClauses: rule.includedClauses,
+        excludedClauses: 0,
+      })
+      rows.push({
+        key: `${rule.id}-exc`,
+        rule,
+        side: 'Excluded',
+        includedClauses: 0,
+        excludedClauses: rule.excludedClauses,
+      })
+    } else {
+      rows.push({
+        key: `${rule.id}`,
+        rule,
+        side: null,
+        includedClauses: rule.includedClauses,
+        excludedClauses: rule.excludedClauses,
+      })
+    }
+  }
+  return rows
 }
 
 export default function Rules() {
+  const [, setLocation] = useLocation()
   const [rules, setRules] = useState<Rule[]>([])
   const [loading, setLoading] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Any')
-  const [activeTab, setActiveTab] = useState('option-1')
 
   useEffect(() => {
     getRules().then(data => {
@@ -58,13 +127,15 @@ export default function Rules() {
     })
   }, [])
 
-  const filteredRules = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const term = appliedSearch.trim().toLowerCase()
-    return rules.filter(rule => {
+    const matching = rules.filter(rule => {
       const matchesSearch = term === '' || rule.name.toLowerCase().includes(term)
-      const matchesStatus = statusFilter === 'Any' || rule.status === statusFilter
+      const matchesStatus =
+        statusFilter === 'Any' || displayStatus(rule.status) === statusFilter
       return matchesSearch && matchesStatus
     })
+    return expandRows(matching)
   }, [rules, appliedSearch, statusFilter])
 
   const handleSearch = () => setAppliedSearch(searchInput)
@@ -87,19 +158,6 @@ export default function Rules() {
       />
 
       <main className="flex-1 overflow-y-auto border-l border-gray-200">
-        <TabsField
-          tabs={[
-            { value: 'option-1', label: 'Option 1' },
-            { value: 'option-2', label: 'Option 2' },
-            { value: 'option-3', label: 'Option 3' },
-          ]}
-          value={activeTab}
-          onValueChange={setActiveTab}
-          variant="UNDERLINE"
-          navigationOnly={true}
-          fullWidthSeparator={true}
-        />
-
         <div className="px-8 py-6">
           <div className="flex items-start justify-between gap-6 mb-6">
             <div>
@@ -210,65 +268,89 @@ export default function Rules() {
             </div>
 
             <ReadOnlyGrid
-              data={filteredRules}
+              data={filteredRows}
               pageSize={10}
               pagingControls="ROW_COUNT"
               borderStyle="LIGHT"
               rowHeader={0}
-              initialSorts={[{ field: 'lastUpdated', ascending: false }]}
               emptyGridMessage={
                 loading ? 'Loading rules...' : 'No rules match your search.'
               }
               accessibilityText="Rules that include or exclude clauses based on clause set data"
             >
-              <GridColumn label="Name" sortField="name" width="WIDE" value="name" />
+              <GridColumn
+                label="Rule"
+                width="WIDE"
+                value={(row: RuleRow) => {
+                  const { title } = splitRuleName(row.rule.name)
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setLocation(`/library-rule/${row.rule.id}`)}
+                      className="text-left font-medium text-blue-700 underline hover:text-blue-800"
+                    >
+                      {title || row.rule.name}
+                    </button>
+                  )
+                }}
+              />
+              <GridColumn
+                label="Clause"
+                width="MEDIUM"
+                value={(row: RuleRow) => splitRuleName(row.rule.name).clause}
+              />
+              <GridColumn
+                label="Source"
+                width="NARROW"
+                value={(row: RuleRow) => displaySource(row.rule.source)}
+              />
               <GridColumn
                 label="Status"
-                sortField="status"
                 width="NARROW"
-                value={(row: Rule) => (
-                  <TagField
-                    size="SMALL"
-                    tags={[
-                      {
-                        text: row.status,
-                        backgroundColor: statusTagColors[row.status].background,
-                        textColor: statusTagColors[row.status].text,
-                      },
-                    ]}
-                    marginBelow="NONE"
-                  />
-                )}
+                value={(row: RuleRow) => {
+                  const s = displayStatus(row.rule.status)
+                  return (
+                    <TagField
+                      size="SMALL"
+                      tags={[
+                        {
+                          text: s,
+                          backgroundColor: statusTagColors[s].background,
+                          textColor: statusTagColors[s].text,
+                        },
+                      ]}
+                      marginBelow="NONE"
+                    />
+                  )
+                }}
               />
-              <GridColumn label="Source" sortField="source" width="NARROW" value="source" />
               <GridColumn
                 label="Conditions"
-                sortField="conditions"
                 width="MEDIUM"
-                value={(row: Rule) => formatRuleConditions(row)}
+                value={(row: RuleRow) => formatRuleConditions(row.rule)}
               />
               <GridColumn
                 label="Included Clauses"
-                sortField="includedClauses"
                 width="NARROW"
                 align="CENTER"
-                value="includedClauses"
+                value={(row: RuleRow) => row.includedClauses}
               />
               <GridColumn
                 label="Excluded Clauses"
-                sortField="excludedClauses"
                 width="NARROW"
                 align="CENTER"
-                value="excludedClauses"
+                value={(row: RuleRow) => row.excludedClauses}
               />
               <GridColumn
                 label="Last Updated"
-                sortField="lastUpdated"
                 width="MEDIUM_PLUS"
-                value={(row: Rule) => (
+                value={(row: RuleRow) => (
                   <RichTextDisplayField
                     value={[
-                      <TextItem key="updated" text={formatRuleTimestamp(row.lastUpdated)} />,
+                      <TextItem
+                        key="updated"
+                        text={formatRuleTimestamp(row.rule.lastUpdated)}
+                      />,
                     ]}
                     preventWrapping={true}
                     marginBelow="NONE"
@@ -279,15 +361,15 @@ export default function Rules() {
                 label=""
                 width="ICON"
                 align="CENTER"
-                value={(row: Rule) => (
+                value={(row: RuleRow) => (
                   <ButtonWidget
                     style="GHOST"
                     color="SECONDARY"
                     size="SMALL"
                     icon="EllipsisVertical"
                     tooltip="Row actions"
-                    accessibilityText={`Actions for ${row.name}`}
-                    onClick={() => alert(`Row actions for ${row.name}`)}
+                    accessibilityText={`Actions for ${row.rule.name}`}
+                    onClick={() => alert(`Row actions for ${row.rule.name}`)}
                   />
                 )}
               />
