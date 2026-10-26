@@ -13,7 +13,6 @@ import {
   RichTextDisplayField,
   TextItem,
   TagField,
-  MessageBanner,
 } from '@pglevy/sailwind'
 import {
   LayoutGrid,
@@ -21,6 +20,7 @@ import {
   Layers,
   CircleHelp,
   Shuffle,
+  Info,
 } from 'lucide-react'
 import {
   getRules,
@@ -219,24 +219,37 @@ export default function Rules() {
           </div>
 
           {pendingReviewCount > 0 && (
-            <div className="mb-6">
-              <MessageBanner
-                primaryText={`You have ${pendingReviewCount} new library ${pendingReviewCount === 1 ? 'rule' : 'rules'} from version 4.1.2.`}
-                secondaryText="Review and accept each one to add it to your active rules."
-                backgroundColor="INFO"
-                highlightColor="INFO"
-                icon="info"
-                shape="SEMI_ROUNDED"
-                buttons={[
-                  {
-                    label: 'Start review',
-                    style: 'SOLID',
-                    color: 'ACCENT',
-                    onClick: () => setLocation('/library/rules-review'),
-                  },
-                ]}
-                marginBelow="NONE"
+            <div
+              className="mb-6 flex items-start gap-3 rounded-md px-4 py-3"
+              style={{ backgroundColor: '#E9E9FE' }}
+              role="status"
+            >
+              <Info
+                size={18}
+                aria-hidden="true"
+                className="mt-0.5 shrink-0"
+                fill="#2322F0"
+                stroke="#FFFFFF"
+                strokeWidth={2}
               />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-900">
+                  You have {pendingReviewCount} new library{' '}
+                  {pendingReviewCount === 1 ? 'rule' : 'rules'} from version 4.1.2.
+                </p>
+                <p className="mt-0.5 text-sm text-gray-700">
+                  Review and accept each one to add it to your active rules.
+                </p>
+              </div>
+              <div className="shrink-0">
+                <ButtonWidget
+                  label="Start review"
+                  style="SOLID"
+                  color="ACCENT"
+                  size="SMALL"
+                  onClick={() => setLocation('/library/rules-review')}
+                />
+              </div>
             </div>
           )}
 
