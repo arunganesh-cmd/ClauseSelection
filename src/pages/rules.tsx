@@ -13,6 +13,7 @@ import {
   RichTextDisplayField,
   TextItem,
   TagField,
+  MessageBanner,
 } from '@pglevy/sailwind'
 import {
   LayoutGrid,
@@ -27,6 +28,7 @@ import {
   formatRuleConditions,
   type Rule,
 } from '../db/rules'
+import { getPendingLibraryReviewCount } from '../db/library-rule-reviews'
 
 const navPages = [
   { label: 'Clause Sets', icon: LayoutGrid },
@@ -119,12 +121,22 @@ export default function Rules() {
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('Any')
+  const [pendingReviewCount, setPendingReviewCount] = useState(0)
 
   useEffect(() => {
     getRules().then(data => {
       setRules(data)
       setLoading(false)
     })
+    getPendingLibraryReviewCount().then(setPendingReviewCount)
+  }, [])
+
+  // Refresh the pending count whenever the user navigates back here, so
+  // decisions made during the review flow collapse the banner.
+  useEffect(() => {
+    const refresh = () => getPendingLibraryReviewCount().then(setPendingReviewCount)
+    window.addEventListener('focus', refresh)
+    return () => window.removeEventListener('focus', refresh)
   }, [])
 
   const filteredRows = useMemo(() => {
@@ -205,6 +217,28 @@ export default function Rules() {
               />
             </div>
           </div>
+
+          {pendingReviewCount > 0 && (
+            <div className="mb-6">
+              <MessageBanner
+                primaryText={`You have ${pendingReviewCount} new library ${pendingReviewCount === 1 ? 'rule' : 'rules'} from version 4.1.2.`}
+                secondaryText="Review and accept each one to add it to your active rules."
+                backgroundColor="INFO"
+                highlightColor="INFO"
+                icon="info"
+                shape="SEMI_ROUNDED"
+                buttons={[
+                  {
+                    label: 'Start review',
+                    style: 'SOLID',
+                    color: 'ACCENT',
+                    onClick: () => setLocation('/library/rules-review'),
+                  },
+                ]}
+                marginBelow="NONE"
+              />
+            </div>
+          )}
 
           <CardLayout padding="STANDARD" showBorder={true} shape="SEMI_ROUNDED">
             <div className="flex items-center gap-3 mb-4 flex-nowrap">

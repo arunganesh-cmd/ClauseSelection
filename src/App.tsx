@@ -23,6 +23,7 @@ import Library from './pages/library'
 import LibraryImport from './pages/library-import'
 import LibrarySummary from './pages/library-summary'
 import LibraryRule from './pages/library-rule'
+import LibraryRulesReview from './pages/library-rules-review'
 
 const pages = [
   { path: '/', title: 'Kanban Board', component: KanbanBoard },
@@ -47,6 +48,7 @@ const pages = [
   { path: '/library/import', title: 'Import Library', component: LibraryImport },
   { path: '/library/import/summary', title: 'Library Import Summary', component: LibrarySummary },
   { path: '/library-rule/:id', title: 'Library Rule', component: LibraryRule },
+  { path: '/library/rules-review', title: 'Review Library Rules', component: LibraryRulesReview },
 ]
 
 function App() {
