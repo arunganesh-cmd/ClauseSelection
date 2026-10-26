@@ -64,9 +64,17 @@ let systemQuestionsImported = true
 const visibleQuestions = () =>
   questions.filter(q => q.source === 'Custom' || systemQuestionsImported)
 
-/** Makes the system questions available for review. Called by "Import system questions". */
+/**
+ * Imports the system questions and marks them all as Approved immediately so
+ * they appear in the Questions tab without a separate review step.
+ */
 export async function importSystemQuestions(): Promise<void> {
   systemQuestionsImported = true
+  for (let i = 0; i < questions.length; i++) {
+    if (questions[i].source === 'Standard' && questions[i].status === 'Pending') {
+      questions[i] = { ...questions[i], status: 'Approved' }
+    }
+  }
 }
 
 /** Everything the customer can currently see: custom questions plus imported system questions. */

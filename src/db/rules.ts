@@ -27,7 +27,7 @@ export interface Rule {
   modifiedBy: string
 }
 
-const rules: Rule[] = [
+const rawRules: Rule[] = [
   {
     id: 1,
     name: 'pktestrule2',
@@ -770,6 +770,21 @@ const rules: Rule[] = [
     modifiedBy: 'david.kim',
   },
 ]
+
+// Each rule has at most ONE included clause OR ONE excluded clause, never both.
+// Pick the side the rule originally had more of; ties favor Included.
+// Rules with no clauses on either side stay at 0/0.
+const rules: Rule[] = rawRules.map(rule => {
+  const hasIncluded = rule.includedClauses > 0
+  const hasExcluded = rule.excludedClauses > 0
+  if (!hasIncluded && !hasExcluded) {
+    return { ...rule, includedClauses: 0, excludedClauses: 0 }
+  }
+  if (rule.includedClauses >= rule.excludedClauses) {
+    return { ...rule, includedClauses: 1, excludedClauses: 0 }
+  }
+  return { ...rule, includedClauses: 0, excludedClauses: 1 }
+})
 
 export async function getRules(): Promise<Rule[]> {
   return rules

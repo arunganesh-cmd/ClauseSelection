@@ -2,18 +2,22 @@
  * Rule approvals data layer.
  *
  * Same rules as `rules.ts`, but each one carries an approval status
- * (Approved, Rejected, Pending) instead of the Active/Draft lifecycle status.
+ * (Approved or Pending) instead of the Active/Draft lifecycle status.
  * Seed data is derived from `getRules()` so both pages stay in sync on names,
  * conditions, and timestamps.
  */
 import { getRules } from './rules'
 
-export type RuleApprovalStatus = 'Accepted' | 'Rejected' | 'Pending'
+export type RuleApprovalStatus = 'Pending' | 'Approved'
+export type RuleActiveStatus = 'Active' | 'Inactive'
 
 export interface RuleApproval {
   id: number
   name: string
+  /** Review status: whether the rule is still Pending or has been Approved. */
   status: RuleApprovalStatus
+  /** Operational status: whether the rule is currently in effect. Separate from review status. */
+  activeStatus: RuleActiveStatus
   /** Number of individual conditions across the rule. */
   conditions: number
   /** Number of condition groups wrapping those conditions. */
@@ -26,19 +30,23 @@ export interface RuleApproval {
   modifiedBy: string
 }
 
-// Deterministic spread so every status shows up on the first page of the grid.
+// Deterministic spread so both statuses show up on the first page of the grid.
 const statusCycle: RuleApprovalStatus[] = [
   'Pending',
-  'Accepted',
-  'Accepted',
-  'Rejected',
-  'Accepted',
+  'Approved',
+  'Approved',
   'Pending',
-  'Accepted',
-  'Rejected',
-  'Accepted',
+  'Approved',
+  'Pending',
+  'Approved',
+  'Pending',
+  'Approved',
   'Pending',
 ]
+
+// All rules are Active by default; only these specific IDs are shown as Inactive
+// so the grid has at most two Inactive rows on the first page.
+const inactiveRuleIds = new Set<number>([3, 7])
 
 let ruleApprovals: RuleApproval[] | null = null
 
@@ -49,6 +57,7 @@ async function load(): Promise<RuleApproval[]> {
       id: rule.id,
       name: rule.name,
       status: statusCycle[index % statusCycle.length],
+      activeStatus: inactiveRuleIds.has(rule.id) ? 'Inactive' : 'Active',
       conditions: rule.conditions,
       conditionGroups: rule.conditionGroups,
       includedClauses: rule.includedClauses,

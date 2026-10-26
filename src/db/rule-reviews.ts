@@ -95,6 +95,18 @@ export interface RuleReview {
   clauses: ReviewClause[]
   /** ISO 8601 timestamp of the last "Save draft", or null if none. */
   draftSavedAt: string | null
+  /**
+   * Immutable snapshot of what the AI first produced for this rule. Captured
+   * once when the review is built and preserved across all subsequent updates
+   * so the AI Generation Summary can always show the original output,
+   * regardless of what the reviewer edits.
+   */
+  aiOriginal: {
+    join: ConditionJoin
+    conditions: RuleCondition[]
+    groups: ConditionGroup[]
+    clauses: ReviewClause[]
+  }
 }
 
 /** The editable parts of a review, used when saving a draft or accepting. */
@@ -511,14 +523,21 @@ function buildFeaturedReview(rule: RuleApproval): RuleReview {
     },
   ]
 
+  const clauses = buildClauses(rule)
   return {
     id: rule.id,
     ruleId: rule.id,
     join: 'AND',
     conditions: [],
     groups,
-    clauses: buildClauses(rule),
+    clauses,
     draftSavedAt: null,
+    aiOriginal: {
+      join: 'AND',
+      conditions: [],
+      groups: structuredClone(groups),
+      clauses: structuredClone(clauses),
+    },
   }
 }
 
@@ -545,14 +564,21 @@ function buildReview(rule: RuleApproval): RuleReview {
     }
   }
 
+  const clauses = buildClauses(rule)
   return {
     id: rule.id,
     ruleId: rule.id,
     join: 'AND',
     conditions,
     groups,
-    clauses: buildClauses(rule),
+    clauses,
     draftSavedAt: null,
+    aiOriginal: {
+      join: 'AND',
+      conditions: structuredClone(conditions),
+      groups: structuredClone(groups),
+      clauses: structuredClone(clauses),
+    },
   }
 }
 
@@ -580,15 +606,23 @@ export async function updateRuleReview(
 ): Promise<RuleReview | undefined> {
   const existing = await getRuleReview(ruleId)
   if (!existing) return undefined
-  const updated = { ...existing, ...data, id: existing.id, ruleId: existing.ruleId }
+  // aiOriginal is immutable — ignore any attempt to overwrite it.
+  const { aiOriginal: _ignored, ...safe } = data
+  const updated = {
+    ...existing,
+    ...safe,
+    id: existing.id,
+    ruleId: existing.ruleId,
+    aiOriginal: existing.aiOriginal,
+  }
   reviews.set(ruleId, updated)
   return updated
 }
 
 /**
  * Stores the reviewer's edits without changing the rule's status. Works for
- * rules in any status (Pending / Approved / Rejected) so reviewers can tweak
- * a rule's content after a decision has already been made.
+ * rules in any status (Pending or Approved), so reviewers can tweak a rule's
+ * content after it has been approved.
  */
 export async function saveRuleReviewDraft(
   ruleId: number,
@@ -600,8 +634,8 @@ export async function saveRuleReviewDraft(
 /**
  * Stores the reviewer's edits and sets the rule's status. `lastUpdated` is
  * left alone so the review queue keeps its order while the reviewer works
- * through it. Accepts transitions from any status, which lets a reviewer
- * revert a decision (back to Pending) or re-decide after reverting.
+ * through it. Accepts transitions from any status, so a reviewer can
+ * re-approve a rule after further edits.
  */
 async function decideRuleReview(
   ruleId: number,
@@ -614,18 +648,19 @@ async function decideRuleReview(
   return updated
 }
 
-export async function acceptRuleReview(
+export async function approveRuleReview(
   ruleId: number,
   content: RuleReviewContent,
 ): Promise<RuleReview | undefined> {
-  return decideRuleReview(ruleId, content, 'Accepted')
+  return decideRuleReview(ruleId, content, 'Approved')
 }
 
-export async function rejectRuleReview(
+/** Saves edits and sets the rule's status back to Pending. */
+export async function pendRuleReview(
   ruleId: number,
   content: RuleReviewContent,
 ): Promise<RuleReview | undefined> {
-  return decideRuleReview(ruleId, content, 'Rejected')
+  return decideRuleReview(ruleId, content, 'Pending')
 }
 
 

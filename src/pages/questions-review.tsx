@@ -40,7 +40,7 @@ export default function QuestionsReview() {
     [questions],
   )
 
-  // Bulk actions only apply to questions that are still pending.
+  /** Only pending rows that are also selected can be acted on in bulk. */
   const pendingSelectedIds = useMemo(
     () =>
       questions
@@ -56,23 +56,28 @@ export default function QuestionsReview() {
     setSelectedIds([])
   }
 
+  const allReviewed = !loading && questions.length > 0 && counts.pending === 0
+
   return (
     <QuestionsShell>
       <div className="px-8 py-6">
-        <div className="flex items-start justify-between gap-6 mb-4">
-          <div>
+        {/* Header: title + subtitle on the left, a cross-nav button on the right that
+            jumps to the Questions tab. Trailing arrow icon signals "go to next page",
+            and OUTLINE style keeps it secondary to the per-row review actions. */}
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
             <HeadingField
               text="Review system questions"
-              size="LARGE"
+              size="MEDIUM_PLUS"
               headingTag="H1"
-              fontWeight="REGULAR"
+              fontWeight="SEMI_BOLD"
               marginBelow="EVEN_LESS"
             />
             <RichTextDisplayField
               value={[
                 <TextItem
-                  key="subtitle"
-                  text="Approve or reject each imported question. Approved questions are added to the Questions tab as standard questions."
+                  key="sub"
+                  text="Approve or reject each imported question. Approved questions are added to your Questions tab — come back anytime to review more."
                   color="SECONDARY"
                   size="MEDIUM"
                 />,
@@ -82,58 +87,90 @@ export default function QuestionsReview() {
           </div>
           <div className="shrink-0">
             <ButtonWidget
-              label="DONE"
-              style="SOLID"
+              label={
+                counts.approved > 0
+                  ? `View ${counts.approved} approved question${counts.approved === 1 ? '' : 's'}`
+                  : 'View questions'
+              }
+              style="OUTLINE"
               color="ACCENT"
+              icon="ArrowRight"
+              iconPosition="END"
+              tooltip="Open the Questions tab. You can come back to continue reviewing."
               onClick={() => setLocation('/questions')}
             />
           </div>
         </div>
 
-        {!loading && questions.length > 0 && counts.pending === 0 && (
+        {/* Completion banner — carries its own CTA so the user does not have to hunt for Done. */}
+        {allReviewed && (
           <div className="mb-4">
             <MessageBanner
-              primaryText="Review complete."
-              secondaryText={`${counts.approved} approved and ${counts.rejected} rejected. Select Done to see the approved questions.`}
+              primaryText="Review complete"
+              secondaryText={`${counts.approved} approved, ${counts.rejected} rejected. Approved questions are now available in your Questions tab.`}
               backgroundColor="SUCCESS"
               highlightColor="POSITIVE"
               icon="success"
+              buttons={[
+                {
+                  label: 'Go to questions',
+                  style: 'SOLID',
+                  color: 'ACCENT',
+                  size: 'SMALL',
+                  onClick: () => setLocation('/questions'),
+                },
+              ]}
               marginBelow="NONE"
             />
           </div>
         )}
 
-        <div className="flex items-center gap-3 mb-4 flex-wrap">
-          <ButtonWidget
-            label="APPROVE SELECTED"
-            style="SOLID"
-            color="POSITIVE"
-            icon="Check"
-            iconPosition="START"
-            disabled={pendingSelectedIds.length === 0}
-            onClick={() => review(pendingSelectedIds, 'Approved')}
-          />
-          <ButtonWidget
-            label="REJECT SELECTED"
-            style="OUTLINE"
-            color="NEGATIVE"
-            icon="X"
-            iconPosition="START"
-            disabled={pendingSelectedIds.length === 0}
-            onClick={() => review(pendingSelectedIds, 'Rejected')}
-          />
-          <RichTextDisplayField
-            value={[
-              <TextItem
-                key="summary"
-                text={`${counts.pending} pending  •  ${counts.approved} approved  •  ${counts.rejected} rejected`}
+        {/* Selection action strip — appears only when the user has selected pending rows. */}
+        {pendingSelectedIds.length > 0 && (
+          <div
+            className="mb-3 flex flex-wrap items-center gap-3 rounded-md border px-4 py-2.5"
+            style={{ borderColor: '#C7D2FE', backgroundColor: '#EEF2FF' }}
+          >
+            <RichTextDisplayField
+              value={[
+                <TextItem
+                  key="n"
+                  text={`${pendingSelectedIds.length} selected`}
+                  style="STRONG"
+                  color="#3730A3"
+                />,
+              ]}
+              marginBelow="NONE"
+            />
+            <ButtonWidget
+              label="Approve"
+              style="SOLID"
+              color="POSITIVE"
+              size="SMALL"
+              icon="Check"
+              iconPosition="START"
+              onClick={() => review(pendingSelectedIds, 'Approved')}
+            />
+            <ButtonWidget
+              label="Reject"
+              style="OUTLINE"
+              color="NEGATIVE"
+              size="SMALL"
+              icon="X"
+              iconPosition="START"
+              onClick={() => review(pendingSelectedIds, 'Rejected')}
+            />
+            <div className="ml-auto">
+              <ButtonWidget
+                label="Clear"
+                style="GHOST"
                 color="SECONDARY"
-              />,
-            ]}
-            marginBelow="NONE"
-            className="ml-auto"
-          />
-        </div>
+                size="SMALL"
+                onClick={() => setSelectedIds([])}
+              />
+            </div>
+          </div>
+        )}
 
         <ReadOnlyGrid
           data={questions}
@@ -142,10 +179,10 @@ export default function QuestionsReview() {
           borderStyle="LIGHT"
           rowHeader={0}
           selectable={true}
-          selectionStyle="CHECKBOX"
+          selectionStyle="CHECKBOX_SUBTLE_HIGHLIGHT"
           selectionValue={selectedIds}
           selectionSaveInto={setSelectedIds}
-          emptyGridMessage={loading ? 'Loading questions...' : 'No questions to review.'}
+          emptyGridMessage={loading ? 'Loading questions…' : 'No questions to review.'}
           accessibilityText="Imported system questions waiting for review, with response type and approval status"
         >
           <GridColumn
@@ -156,7 +193,7 @@ export default function QuestionsReview() {
               <RichTextDisplayField
                 value={[
                   <TextItem
-                    key="question"
+                    key="q"
                     text={row.question}
                     color="ACCENT"
                     link={() => setOpenQuestion(row)}
@@ -167,16 +204,18 @@ export default function QuestionsReview() {
               />
             )}
           />
-          <GridColumn label="Response Type" sortField="responseType" width="2X" value="responseType" />
+          <GridColumn
+            label="Response type"
+            sortField="responseType"
+            width="2X"
+            value="responseType"
+          />
+          {/* Merged status + review column — pending rows show inline action icons,
+              reviewed rows show their final status tag. One column, no "Reviewed" filler. */}
           <GridColumn
             label="Status"
             sortField="status"
-            width="2X"
-            value={(row: Question) => <QuestionStatusTag status={row.status} />}
-          />
-          <GridColumn
-            label="Review"
-            width="2X"
+            width="3X"
             value={(row: Question) =>
               row.status === 'Pending' ? (
                 <div className="flex items-center gap-1">
@@ -186,7 +225,7 @@ export default function QuestionsReview() {
                     size="SMALL"
                     icon="Check"
                     tooltip="Approve"
-                    accessibilityText={`Approve question: ${row.question}`}
+                    accessibilityText={`Approve: ${row.question}`}
                     onClick={() => review([row.id], 'Approved')}
                   />
                   <ButtonWidget
@@ -195,15 +234,12 @@ export default function QuestionsReview() {
                     size="SMALL"
                     icon="X"
                     tooltip="Reject"
-                    accessibilityText={`Reject question: ${row.question}`}
+                    accessibilityText={`Reject: ${row.question}`}
                     onClick={() => review([row.id], 'Rejected')}
                   />
                 </div>
               ) : (
-                <RichTextDisplayField
-                  value={[<TextItem key="done" text="Reviewed" color="GRAY_500" />]}
-                  marginBelow="NONE"
-                />
+                <QuestionStatusTag status={row.status} />
               )
             }
           />

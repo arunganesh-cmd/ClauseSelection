@@ -13,50 +13,45 @@ import {
   TextItem,
   TagField,
   DialogField,
-  CheckboxField,
-  ToggleField,
 } from '@pglevy/sailwind'
 import {
-  LayoutGrid,
   List,
-  Layers,
   CircleHelp,
   Shuffle,
+  Pencil,
 } from 'lucide-react'
 import {
   getRuleApprovals,
   formatRuleApprovalConditions,
   type RuleApproval,
   type RuleApprovalStatus,
+  type RuleActiveStatus,
 } from '../db/rule-approvals'
 import { formatRuleTimestamp } from '../db/rules'
 
 const navPages = [
-  { label: 'Clause Sets', icon: LayoutGrid },
   { label: 'Clauses', icon: List },
-  { label: 'Templates', icon: Layers },
   { label: 'Questionnaires', icon: CircleHelp },
   { label: 'Rules', icon: Shuffle, isSelected: true },
 ]
 
-const statusChoices: RuleApprovalStatus[] = ['Accepted', 'Rejected', 'Pending']
+const reviewStatusChoices: RuleApprovalStatus[] = ['Pending', 'Approved']
+const activeStatusChoices: RuleActiveStatus[] = ['Active', 'Inactive']
 
 const statusTagColors: Record<RuleApprovalStatus, { background: string; text: string }> = {
-  Accepted: { background: '#D7F3E0', text: '#166534' },
-  Rejected: { background: '#FDE2E2', text: '#991B1B' },
   Pending: { background: '#DBEAFE', text: '#1E40AF' },
+  Approved: { background: '#D7F3E0', text: '#166534' },
 }
-
-const exportFormats = ['Appian App Package (.zip)', 'JSON', 'CSV']
 
 export default function RulesReview() {
   const [, setLocation] = useLocation()
   const [rules, setRules] = useState<RuleApproval[]>([])
   const [loading, setLoading] = useState(true)
-  const [exportOpen, setExportOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string | null>(null)
+  const [reviewStatusFilter, setReviewStatusFilter] = useState<string | null>(null)
+  const [activeStatusFilter, setActiveStatusFilter] = useState<string | null>(null)
+  const [confirmingExport, setConfirmingExport] = useState(false)
 
   useEffect(() => {
     getRuleApprovals().then(data => {
@@ -69,15 +64,19 @@ export default function RulesReview() {
     const term = appliedSearch.trim().toLowerCase()
     return rules.filter(rule => {
       const matchesSearch = term === '' || rule.name.toLowerCase().includes(term)
-      const matchesStatus = statusFilter === null || rule.status === statusFilter
-      return matchesSearch && matchesStatus
+      const matchesReviewStatus =
+        reviewStatusFilter === null || rule.status === reviewStatusFilter
+      const matchesActiveStatus =
+        activeStatusFilter === null || rule.activeStatus === activeStatusFilter
+      return matchesSearch && matchesReviewStatus && matchesActiveStatus
     })
-  }, [rules, appliedSearch, statusFilter])
+  }, [rules, appliedSearch, reviewStatusFilter, activeStatusFilter])
 
   const handleRefresh = async () => {
     setSearchInput('')
     setAppliedSearch('')
-    setStatusFilter(null)
+    setReviewStatusFilter(null)
+    setActiveStatusFilter(null)
     // The data layer returns the same array each time, so copy it to trigger a re-render.
     setRules([...(await getRuleApprovals())])
   }
@@ -120,9 +119,10 @@ export default function RulesReview() {
                 label="Export Package"
                 style="OUTLINE"
                 color="ACCENT"
-                icon="Package"
+                size="SMALL"
+                icon="Box"
                 iconPosition="START"
-                onClick={() => setExportOpen(true)}
+                onClick={() => setConfirmingExport(true)}
               />
             </div>
           </div>
@@ -149,15 +149,28 @@ export default function RulesReview() {
                 onClick={() => setAppliedSearch(searchInput)}
               />
 
-              <div className="w-60 shrink-0">
+              <div className="w-64 shrink-0">
+                <DropdownField
+                  label="REVIEW STATUS"
+                  labelPosition="ADJACENT"
+                  placeholder="Any"
+                  choiceLabels={reviewStatusChoices}
+                  choiceValues={reviewStatusChoices}
+                  value={reviewStatusFilter}
+                  saveInto={value => setReviewStatusFilter(value ?? null)}
+                  marginBelow="NONE"
+                />
+              </div>
+
+              <div className="w-56 shrink-0">
                 <DropdownField
                   label="STATUS"
                   labelPosition="ADJACENT"
                   placeholder="Any"
-                  choiceLabels={statusChoices}
-                  choiceValues={statusChoices}
-                  value={statusFilter}
-                  saveInto={value => setStatusFilter(value ?? null)}
+                  choiceLabels={activeStatusChoices}
+                  choiceValues={activeStatusChoices}
+                  value={activeStatusFilter}
+                  saveInto={value => setActiveStatusFilter(value ?? null)}
                   marginBelow="NONE"
                 />
               </div>
@@ -191,7 +204,6 @@ export default function RulesReview() {
             </div>
 
             <ReadOnlyGrid
-              className="[&_tbody_td]:py-3"
               data={filteredRules}
               pageSize={10}
               pagingControls="ROW_COUNT"
@@ -205,25 +217,13 @@ export default function RulesReview() {
                 label="Name"
                 sortField="name"
                 width="WIDE"
-                value={(row: RuleApproval) => (
-                  <RichTextDisplayField
-                    value={[
-                      <TextItem
-                        key="name"
-                        text={row.name}
-                        color="ACCENT"
-                        link={() => setLocation(`/rules-review/${row.id}`)}
-                        linkStyle="STANDALONE"
-                      />,
-                    ]}
-                    marginBelow="NONE"
-                  />
-                )}
+                value="name"
               />
               <GridColumn
-                label="Status"
+                label="Review Status"
                 sortField="status"
-                width="NARROW"
+                width="MEDIUM"
+                align="START"
                 value={(row: RuleApproval) => (
                   <TagField
                     size="SMALL"
@@ -237,6 +237,13 @@ export default function RulesReview() {
                     marginBelow="NONE"
                   />
                 )}
+              />
+              <GridColumn
+                label="Status"
+                sortField="activeStatus"
+                width="NARROW"
+                align="START"
+                value="activeStatus"
               />
               <GridColumn
                 label="Conditions"
@@ -275,189 +282,63 @@ export default function RulesReview() {
                 )}
               />
               <GridColumn
-                label=""
-                width="MEDIUM"
-                align="START"
-                value={(row: RuleApproval) =>
-                  row.status === 'Pending' ? (
-                    <RichTextDisplayField
-                      value={[
-                        <TextItem
-                          key="start-review"
-                          text="Start Review"
-                          color="ACCENT"
-                          link={() => setLocation(`/rules-review/${row.id}`)}
-                          linkStyle="STANDALONE"
-                        />,
-                      ]}
-                      preventWrapping={true}
-                      marginBelow="NONE"
-                    />
-                  ) : (
-                    '-'
-                  )
-                }
+                label="Edit"
+                width="ICON"
+                align="CENTER"
+                value={(row: RuleApproval) => (
+                  <button
+                    type="button"
+                    onClick={() => setLocation(`/rules-review/${row.id}`)}
+                    aria-label={`Edit ${row.name}`}
+                    className="inline-flex items-center justify-center rounded p-1 text-blue-700 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    <Pencil size={18} aria-hidden="true" />
+                  </button>
+                )}
               />
             </ReadOnlyGrid>
           </CardLayout>
         </div>
-      </main>
 
-      {exportOpen && (
-        <ExportPackageDialog
-          rules={rules}
-          onClose={() => setExportOpen(false)}
-        />
-      )}
-    </div>
-  )
-}
-
-/* -------------------------------------------------------------------------- */
-/* Export Package dialog                                                      */
-/* -------------------------------------------------------------------------- */
-
-const scopeChoices: RuleApprovalStatus[] = ['Accepted', 'Pending', 'Rejected']
-const environmentChoices = ['Development', 'Test', 'Production']
-
-function ExportPackageDialog({
-  rules,
-  onClose,
-}: {
-  rules: RuleApproval[]
-  onClose: () => void
-}) {
-  const today = new Date()
-  const defaultName = `clause-rules-${today.toISOString().slice(0, 10)}`
-
-  const [name, setName] = useState(defaultName)
-  const [format, setFormat] = useState<string | null>(exportFormats[0])
-  const [scope, setScope] = useState<RuleApprovalStatus[]>(['Accepted'])
-  const [includeClauseText, setIncludeClauseText] = useState(true)
-  const [includeHistory, setIncludeHistory] = useState(false)
-  const [sendToEnv, setSendToEnv] = useState(false)
-  const [targetEnv, setTargetEnv] = useState<string | null>('Development')
-  const [exporting, setExporting] = useState(false)
-
-  const selectedRules = rules.filter(r => scope.includes(r.status))
-  const clauseCount = selectedRules.reduce(
-    (sum, r) => sum + r.includedClauses + r.excludedClauses,
-    0,
-  )
-
-  const handleDownload = async () => {
-    setExporting(true)
-    // Prototype only: pretend to package and let the dialog close.
-    await new Promise(resolve => setTimeout(resolve, 600))
-    setExporting(false)
-    onClose()
-    alert(
-      `Package "${name}" prepared.\n\n${selectedRules.length} rules · ${clauseCount} clauses\nFormat: ${format}${
-        sendToEnv ? `\nSent to: ${targetEnv}` : ''
-      }`,
-    )
-  }
-
-  return (
-    <DialogField
-      open={true}
-      onOpenChange={open => {
-        if (!open) onClose()
-      }}
-      title="Export Rules Package"
-      description="Bundle rules and their clauses to share or deploy."
-      width="MEDIUM"
-      height="FIT"
-      closeOnOutsideClick={false}
-      marginBelow="NONE"
-    >
-      <div className="space-y-5">
-        <TextField
-          label="Package Name"
-          required={true}
-          value={name}
-          saveInto={setName}
-          marginBelow="NONE"
-        />
-
-        <DropdownField
-          label="Format"
-          required={true}
-          choiceLabels={exportFormats}
-          choiceValues={exportFormats}
-          value={format}
-          saveInto={setFormat}
-          marginBelow="NONE"
-        />
-
-        <div>
-          <CheckboxField
-            label="Include Rules With Status"
-            choiceLabels={scopeChoices}
-            choiceValues={scopeChoices}
-            value={scope}
-            saveInto={value => setScope((value as RuleApprovalStatus[]) ?? [])}
-            choiceLayout="COMPACT"
+        {confirmingExport && (
+          <DialogField
+            open={true}
+            onOpenChange={open => {
+              if (!open) setConfirmingExport(false)
+            }}
+            title="Export package?"
+            width="MEDIUM"
+            height="FIT"
+            closeOnOutsideClick={false}
             marginBelow="NONE"
-          />
-        </div>
-
-        <div className="space-y-3 rounded-md border border-gray-200 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
-            What to include
-          </p>
-          <ToggleField
-            choiceLabel="Include full clause text"
-            value={includeClauseText}
-            saveInto={setIncludeClauseText}
-            marginBelow="NONE"
-          />
-          <ToggleField
-            choiceLabel="Include version history"
-            value={includeHistory}
-            saveInto={setIncludeHistory}
-            marginBelow="NONE"
-          />
-          <ToggleField
-            choiceLabel="Send to Appian environment after download"
-            value={sendToEnv}
-            saveInto={setSendToEnv}
-            marginBelow="NONE"
-          />
-          {sendToEnv && (
-            <div className="pt-2">
-              <DropdownField
-                label="Target Environment"
-                choiceLabels={environmentChoices}
-                choiceValues={environmentChoices}
-                value={targetEnv}
-                saveInto={setTargetEnv}
-                marginBelow="NONE"
+          >
+            <p className="text-sm text-gray-600">
+              Only rules in the <span className="font-semibold text-gray-900">Approved</span>{' '}
+              status will be included in the package.
+            </p>
+            <hr className="-mx-6 mt-6 border-gray-200" />
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <ButtonWidget
+                label="CANCEL"
+                style="OUTLINE"
+                color="ACCENT"
+                onClick={() => setConfirmingExport(false)}
+              />
+              <ButtonWidget
+                label="EXPORT"
+                style="SOLID"
+                color="ACCENT"
+                onClick={() => {
+                  setConfirmingExport(false)
+                  alert(
+                    'Export started (not wired up in this prototype). Only Approved rules would be included.',
+                  )
+                }}
               />
             </div>
-          )}
-        </div>
-
-        <hr className="border-gray-200" />
-        <div className="flex items-center justify-between">
-          <ButtonWidget
-            label="CANCEL"
-            style="LINK"
-            color="ACCENT"
-            disabled={exporting}
-            onClick={onClose}
-          />
-          <ButtonWidget
-            label={exporting ? 'PREPARING...' : 'DOWNLOAD PACKAGE'}
-            style="SOLID"
-            color="ACCENT"
-            icon="Download"
-            iconPosition="START"
-            disabled={exporting || selectedRules.length === 0 || !name.trim()}
-            onClick={handleDownload}
-          />
-        </div>
-      </div>
-    </DialogField>
+          </DialogField>
+        )}
+      </main>
+    </div>
   )
 }

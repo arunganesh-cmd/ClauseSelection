@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useLocation } from 'wouter'
 import {
   ReadOnlyGrid,
   GridColumn,
@@ -9,14 +8,13 @@ import {
   RichTextDisplayField,
   TextItem,
   MessageBanner,
+  TabsField,
 } from '@pglevy/sailwind'
 import QuestionsShell from '../components/questions-shell'
 import UpdateQuestionDialog from '../components/update-question-dialog'
 import { EXCEL_ACCEPT, isExcelFile } from '../lib/excel-file'
 import {
   getApprovedQuestions,
-  getPendingQuestionCount,
-  getSystemQuestions,
   importCustomQuestions,
   formatQuestionTimestamp,
   type Question,
@@ -30,10 +28,7 @@ const CURRENT_USER = 'john.smith'
 const responseTypeChoices: QuestionResponseType[] = ['Radio Button', 'Dropdown']
 
 export default function Questions() {
-  const [, setLocation] = useLocation()
   const [questions, setQuestions] = useState<Question[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
-  const [systemCount, setSystemCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
@@ -42,17 +37,12 @@ export default function Questions() {
   const [creating, setCreating] = useState(false)
   const [importMessage, setImportMessage] = useState<string | null>(null)
   const [fileError, setFileError] = useState(false)
+  const [view, setView] = useState<'option1' | 'option2'>('option1')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = async () => {
-    const [approved, pending, system] = await Promise.all([
-      getApprovedQuestions(),
-      getPendingQuestionCount(),
-      getSystemQuestions(),
-    ])
+    const approved = await getApprovedQuestions()
     setQuestions(approved)
-    setPendingCount(pending)
-    setSystemCount(system.length)
     setLoading(false)
   }
 
@@ -95,44 +85,6 @@ export default function Questions() {
   return (
     <QuestionsShell>
       <div className="px-8 py-6">
-        {!loading && pendingCount > 0 && (
-          <div className="mb-4">
-            <MessageBanner
-              primaryText={`${pendingCount} ${pendingCount === 1 ? 'question still needs' : 'questions still need'} review.`}
-              secondaryText="Only approved questions appear here. Continue reviewing to approve or reject the rest."
-              backgroundColor="WARN"
-              highlightColor="WARN"
-              icon="warning"
-              buttons={[
-                {
-                  label: 'CONTINUE REVIEW',
-                  style: 'OUTLINE',
-                  color: 'ACCENT',
-                  onClick: () => setLocation('/questions-review'),
-                },
-              ]}
-              marginBelow="NONE"
-            />
-          </div>
-        )}
-
-        {!loading && pendingCount === 0 && systemCount > 0 && (
-          <div className="mb-4">
-            <MessageBanner
-              primaryText="No questions left for review."
-              secondaryText={
-                questions.some(q => q.source === 'Standard')
-                  ? undefined
-                  : 'None of the imported system questions were approved.'
-              }
-              backgroundColor="INFO"
-              highlightColor="INFO"
-              icon="info"
-              marginBelow="NONE"
-            />
-          </div>
-        )}
-
         {fileError && (
           <div className="mb-4">
             <MessageBanner
@@ -250,6 +202,20 @@ export default function Questions() {
           tabIndex={-1}
         />
 
+        <div className="mb-4">
+          <TabsField
+            tabs={[
+              { value: 'option1', label: 'Option 1' },
+              { value: 'option2', label: 'Option 2' },
+            ]}
+            value={view}
+            onValueChange={v => setView(v as 'option1' | 'option2')}
+            variant="UNDERLINE"
+            navigationOnly={true}
+            marginBelow="NONE"
+          />
+        </div>
+
         <ReadOnlyGrid
           data={filteredQuestions}
           pageSize={20}
@@ -267,22 +233,37 @@ export default function Questions() {
           <GridColumn
             label="Question"
             sortField="question"
-            width="6X"
+            width={view === 'option2' ? '7X' : '6X'}
             value={(row: Question) => (
-              <RichTextDisplayField
-                value={[
-                  <TextItem
-                    key="question"
-                    text={row.question}
-                    color="ACCENT"
-                    link={() => setSelectedQuestion(row)}
-                    linkStyle="STANDALONE"
-                  />,
-                ]}
-                marginBelow="NONE"
-              />
+              <div className="flex flex-col gap-0.5">
+                <RichTextDisplayField
+                  value={[
+                    <TextItem
+                      key="question"
+                      text={row.question}
+                      color="ACCENT"
+                      link={() => setSelectedQuestion(row)}
+                      linkStyle="STANDALONE"
+                    />,
+                  ]}
+                  marginBelow="NONE"
+                />
+                {view === 'option2' && (
+                  <span className="text-xs text-gray-500">
+                    {row.source === 'Standard' ? 'System' : row.source}
+                  </span>
+                )}
+              </div>
             )}
           />
+          {view === 'option1' && (
+            <GridColumn
+              label="Source"
+              sortField="source"
+              width="2X"
+              value={(row: Question) => (row.source === 'Standard' ? 'System' : row.source)}
+            />
+          )}
           <GridColumn
             label="Response Type"
             sortField="responseType"
@@ -303,7 +284,6 @@ export default function Questions() {
               />
             )}
           />
-          <GridColumn label="Source" sortField="source" width="2X" value="source" />
         </ReadOnlyGrid>
       </div>
 

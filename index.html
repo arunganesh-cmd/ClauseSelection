@@ -7,7 +7,9 @@
     <title>Sailwind Starter</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- data-gramm & siblings opt the app out of Grammarly / LanguageTool so
+         they don't add their own underlines over Sailwind dialog titles etc. -->
+    <div id="root" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
